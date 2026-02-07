@@ -4,50 +4,39 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import StandardScaler
 
-def load_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """
-    loads processed data
-    returns X, y, X_test
-    """
+def load_data():
     train_df = pd.read_parquet("data/train_processed.parquet")
     test_df = pd.read_parquet("data/test_processed.parquet")
-    
     drop_cols = ['Name', 'Ticket', 'Cabin', 'PassengerId']
     train_df = train_df.drop(columns=[c for c in drop_cols if c in train_df.columns])
     test_df = test_df.drop(columns=[c for c in drop_cols if c in test_df.columns])
-    
     train_df = pd.get_dummies(train_df, columns=['Embarked', 'Title'], drop_first=True)
     test_df = pd.get_dummies(test_df, columns=['Embarked', 'Title'], drop_first=True)
-    
     missing_cols = set(train_df.columns) - set(test_df.columns)
     for c in missing_cols:
         if c != 'Survived':
             test_df[c] = 0
     test_df = test_df[train_df.drop(columns=['Survived']).columns]
-    
     y = train_df['Survived']
     X = train_df.drop(columns=['Survived'])
     return X, y, test_df
 
 if __name__ == "__main__":
     print("\n--- Training Logistic Regression ---")
-    X, y, X_test = load_data()
-    
-    # Scaling is crucial for Logistic Regression
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-    X_test_scaled = scaler.transform(X_test)
-    
-    X_train, X_val, y_train, y_val = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
-    
-    model = LogisticRegression(max_iter=1000, random_state=1)
-    model.fit(X_train, y_train)
-    
-    acc = accuracy_score(y_val, model.predict(X_val))
-    print(f"Logistic Regression Validation Accuracy: {acc:.4f}")
-    
-    preds = model.predict(X_test_scaled)
-    sub = pd.read_csv("data/gender_submission.csv")
-    sub['Survived'] = preds
-    sub.to_csv("data/submission_logreg.csv", index=False)
-    print("Saved: data/submission_logreg.csv")
+    try:
+        X, y, X_test = load_data()
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+        X_test_scaled = scaler.transform(X_test)
+        X_train, X_val, y_train, y_val = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+        model = LogisticRegression(max_iter=1000, random_state=1)
+        model.fit(X_train, y_train)
+        acc = accuracy_score(y_val, model.predict(X_val))
+        print(f"Validation Accuracy: {acc:.4f}")
+        preds = model.predict(X_test_scaled)
+        sub = pd.read_csv("data/gender_submission.csv")
+        sub['Survived'] = preds
+        sub.to_csv("data/submission_logreg.csv", index=False)
+        print("Saved: data/submission_logreg.csv")
+    except Exception as e:
+        print(f"Error: {e}")
