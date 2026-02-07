@@ -20,3 +20,8 @@
     * **Title Extraction**: Regex pulls titles (Mr, Mrs) from Name.
     * **Family Size**: `SibSp` + `Parch` + 1.
     * **IsAlone**: Boolean flag if Family Size is 1.
+
+## Step 4: Modeling
+* **Script**: `scripts/train_model.py`
+* **Action**: Encodes text, aligns columns, trains Random Forest.
+* **Result**: `data/submission.csv` (Ready for Kaggle).
