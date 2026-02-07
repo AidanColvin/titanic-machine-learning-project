@@ -15,10 +15,10 @@ def extract_title(name: str) -> str:
     return the title 
     found between comma and period
     """
-    if not isinstance(name, str): return ""
-    search = re.search(' ([A-Za-z]+)\.', name)
-    if search:
-        return search.group(1)
+    # Regex searches for space, letters, then a dot
+    title_search = re.search(' ([A-Za-z]+)\.', name)
+    if title_search:
+        return title_search.group(1)
     return ""
 
 def create_family_size(df: pd.DataFrame) -> pd.DataFrame:
@@ -53,35 +53,50 @@ def simplify_titles(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     if 'Name' in df.columns:
         df['Title'] = df['Name'].apply(extract_title)
-        df['Title'] = df['Title'].replace(['Lady', 'Countess','Capt', 'Col', 'Don', 'Dr', 'Major', 'Rev', 'Sir', 'Jonkheer', 'Dona'], 'Misc')
-        df['Title'] = df['Title'].replace(['Mlle', 'Ms'], 'Miss')
+        
+        rare_titles = ['Lady', 'Countess','Capt', 'Col', 'Don', 'Dr', 'Major', 'Rev', 'Sir', 'Jonkheer', 'Dona']
+        df['Title'] = df['Title'].replace(rare_titles, 'Misc')
+        
+        df['Title'] = df['Title'].replace('Mlle', 'Miss')
+        df['Title'] = df['Title'].replace('Ms', 'Miss')
         df['Title'] = df['Title'].replace('Mme', 'Mrs')
     return df
 
-def process_dataset(df: pd.DataFrame) -> pd.DataFrame:
+def final_preprocessing(train_df: pd.DataFrame, test_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    given a dataframe 
-    return processed dataframe 
-    titles extracted 
-    family features created
+    given train and test dataframes 
+    return both dataframes fully processed 
+    titles extracted and features engineered
     """
-    df = simplify_titles(df)
-    df = create_family_size(df)
-    df = create_is_alone(df)
-    return df
+    # Combine for structural consistency as requested
+    combined = [train_df, test_df]
+    processed = []
+    
+    for df in combined:
+        df = simplify_titles(df)
+        df = create_family_size(df)
+        df = create_is_alone(df)
+        processed.append(df)
+        
+    return processed[0], processed[1]
 
 if __name__ == "__main__":
-    files = ["train", "test"]
+    print("\n[Step 3] Processing Features (Feature Engineering)...")
     
-    print("\n[Step 3] Processing Features...")
-    for name in files:
-        input_path = f"data/{name}_cleaned.parquet"
-        output_path = f"data/{name}_processed.parquet"
+    try:
+        # Load cleaned data
+        train = load_parquet("data/train_cleaned.parquet")
+        test = load_parquet("data/test_cleaned.parquet")
         
-        try:
-            df = load_parquet(input_path)
-            df_proc = process_dataset(df)
-            df_proc.to_parquet(output_path)
-            print(f"processed {input_path} saved to {output_path}")
-        except FileNotFoundError:
-            print(f"skipping {name}: input file not found")
+        # Apply final preprocessing logic
+        train_processed, test_processed = final_preprocessing(train, test)
+        
+        # Save results
+        train_processed.to_parquet("data/train_processed.parquet")
+        test_processed.to_parquet("data/test_processed.parquet")
+        
+        print("processed data/train_cleaned.parquet saved to data/train_processed.parquet")
+        print("processed data/test_cleaned.parquet saved to data/test_processed.parquet")
+        
+    except FileNotFoundError:
+        print("error: cleaned files not found. run clean_data.py first.")

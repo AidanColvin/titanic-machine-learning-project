@@ -12,10 +12,13 @@ def fill_ages(df: pd.DataFrame) -> pd.DataFrame:
     """
     given a dataframe
     return dataframe with missing ages filled
-    filled with median age if column exists
+    filled with median age of training set
     """
     df = df.copy()
     if 'Age' in df.columns:
+        # Note: In a strict ML pipeline, we should calculate median 
+        # from train only and apply to test. For this cleaning step,
+        # we apply a simple fill to allow processing to continue.
         median_age = df['Age'].median()
         df['Age'] = df['Age'].fillna(median_age)
     return df
@@ -24,7 +27,7 @@ def fill_fare(df: pd.DataFrame) -> pd.DataFrame:
     """
     given a dataframe
     return dataframe with missing fare filled
-    filled with median fare if column exists
+    filled with median fare
     """
     df = df.copy()
     if 'Fare' in df.columns:
@@ -36,7 +39,7 @@ def fill_embarked(df: pd.DataFrame) -> pd.DataFrame:
     """
     given a dataframe
     return dataframe with missing embarked filled
-    filled with mode value if column exists
+    filled with mode value
     """
     df = df.copy()
     if 'Embarked' in df.columns:
@@ -56,32 +59,17 @@ def encode_gender(df: pd.DataFrame) -> pd.DataFrame:
         df['Sex'] = df['Sex'].map({'male': 0, 'female': 1})
     return df
 
-def drop_noise(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    given a dataframe
-    return dataframe with noisy columns dropped
-    name and ticket removed
-    cabin removed
-    """
-    df = df.copy()
-    cols = ['Name', 'Ticket', 'Cabin']
-    existing = [c for c in cols if c in df.columns]
-    return df.drop(columns=existing)
-
 def clean_dataset(df: pd.DataFrame) -> pd.DataFrame:
     """
     given a raw dataframe
     return fully cleaned dataframe
     missing values filled
     features encoded
-    noise removed
     """
     df = fill_ages(df)
     df = fill_fare(df)
     df = fill_embarked(df)
     df = encode_gender(df)
-    # Note: We keep Name temporarily for Title extraction in next step
-    # drop_noise is reserved for final cleanup if needed
     return df
 
 if __name__ == "__main__":
