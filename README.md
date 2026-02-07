@@ -1,3 +1,11 @@
+@misc{titanic,
+    author = {Aidan Colvin},
+    title = {Titanic - Machine Learning from Disaster},
+    year = {2026},
+    howpublished = {\url{https://kaggle.com/competitions/titanic}},
+    note = {Kaggle}
+}
+
 # Titanic Machine Learning Project
 
 ## Repository Structure
