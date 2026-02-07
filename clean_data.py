@@ -12,34 +12,36 @@ def fill_ages(df: pd.DataFrame) -> pd.DataFrame:
     """
     given a dataframe
     return dataframe with missing ages filled
-    filled with median age
-    original data preserved
+    filled with median age if column exists
     """
     df = df.copy()
-    median_age = df['Age'].median()
-    df['Age'] = df['Age'].fillna(median_age)
+    if 'Age' in df.columns:
+        median_age = df['Age'].median()
+        df['Age'] = df['Age'].fillna(median_age)
     return df
 
 def fill_fare(df: pd.DataFrame) -> pd.DataFrame:
     """
     given a dataframe
     return dataframe with missing fare filled
-    filled with median fare
+    filled with median fare if column exists
     """
     df = df.copy()
-    median_fare = df['Fare'].median()
-    df['Fare'] = df['Fare'].fillna(median_fare)
+    if 'Fare' in df.columns:
+        median_fare = df['Fare'].median()
+        df['Fare'] = df['Fare'].fillna(median_fare)
     return df
 
 def fill_embarked(df: pd.DataFrame) -> pd.DataFrame:
     """
     given a dataframe
     return dataframe with missing embarked filled
-    filled with mode value
+    filled with mode value if column exists
     """
     df = df.copy()
-    mode_embarked = df['Embarked'].mode()[0]
-    df['Embarked'] = df['Embarked'].fillna(mode_embarked)
+    if 'Embarked' in df.columns:
+        mode_embarked = df['Embarked'].mode()[0]
+        df['Embarked'] = df['Embarked'].fillna(mode_embarked)
     return df
 
 def encode_gender(df: pd.DataFrame) -> pd.DataFrame:
@@ -50,7 +52,8 @@ def encode_gender(df: pd.DataFrame) -> pd.DataFrame:
     female mapped to 1
     """
     df = df.copy()
-    df['Sex'] = df['Sex'].map({'male': 0, 'female': 1})
+    if 'Sex' in df.columns:
+        df['Sex'] = df['Sex'].map({'male': 0, 'female': 1})
     return df
 
 def drop_unnecessary_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -62,14 +65,14 @@ def drop_unnecessary_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
     df = df.copy()
     cols = ['Name', 'Ticket', 'Cabin']
-    return df.drop(columns=[c for c in cols if c in df.columns])
+    existing_cols = [c for c in cols if c in df.columns]
+    return df.drop(columns=existing_cols)
 
 def clean_dataset(df: pd.DataFrame) -> pd.DataFrame:
     """
     given a raw dataframe
     return fully cleaned dataframe
-    missing values filled
-    features encoded
+    missing values filled if columns exist
     noise removed
     """
     df = fill_ages(df)
@@ -78,23 +81,33 @@ def clean_dataset(df: pd.DataFrame) -> pd.DataFrame:
     df = encode_gender(df)
     return drop_unnecessary_columns(df)
 
-# Main execution
 if __name__ == "__main__":
-    files = [
+    # List of files to process in the repository
+    target_files = [
         "train.parquet", 
         "test.parquet", 
         "gender_submission.parquet"
     ]
     
-    for file in files:
+    print("Starting data cleaning process...\n")
+    
+    for file in target_files:
         try:
+            # Load and process the data
             raw_data = load_data(file)
             cleaned_data = clean_dataset(raw_data)
             
-            # Save to new file
+            # Generate the new filename
             output_name = file.replace(".parquet", "_cleaned.parquet")
+            
+            # Save the new version back to the repository
             cleaned_data.to_parquet(output_name)
+            
+            # Print confirmation to terminal
             print(f"cleaned {file} and saved to {output_name}")
             
-        except FileNotFoundError:
-            print(f"could not find file {file}")
+        except Exception as e:
+            # Report any errors specifically for that file
+            print(f"failed to process {file}: {e}")
+
+    print("\nAll tasks completed.")
