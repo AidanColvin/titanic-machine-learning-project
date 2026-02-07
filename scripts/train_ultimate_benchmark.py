@@ -9,11 +9,12 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.metrics import accuracy_score
 from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
 from catboost import CatBoostClassifier
 
-# Suppress warnings
+# Suppress warnings for cleaner terminal output
 warnings.filterwarnings('ignore')
 
 # --- FIX: Custom Wrapper to make CatBoost compatible with new Scikit-Learn ---
@@ -33,25 +34,42 @@ class SklearnCompatibleCatBoost(BaseEstimator, ClassifierMixin):
         )
 
     def fit(self, X, y):
+        """
+        given X and y
+        fit the internal catboost model
+        return self
+        """
         self.model.fit(X, y)
+        # Required for VotingClassifier to know class labels
         self.classes_ = self.model.classes_
         return self
 
     def predict(self, X):
+        """
+        given X
+        return predictions
+        """
         return self.model.predict(X)
 
     def predict_proba(self, X):
+        """
+        given X
+        return probability estimates
+        """
         return self.model.predict_proba(X)
     
     def __sklearn_tags__(self):
-        # This is the missing piece that caused your error
+        """
+        bypass for sklearn 1.6+ compatibility check
+        """
         from sklearn.utils._tags import ClassifierTags
         return ClassifierTags()
 
-def load_and_prep_data():
+def load_and_prep_data() -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
     """
-    Loads data and applies the winning Feature Engineering strategy:
-    TicketFreq + TitleGroup + FarePerPerson + Deck + IsMother
+    given raw csv files
+    return prepared X, y, and X_test
+    includes ticket frequency, title grouping, and fare per person
     """
     try:
         train = pd.read_csv("data/train.csv")
@@ -93,17 +111,24 @@ def load_and_prep_data():
     df = df.drop(columns=[c for c in drop_cols if c in df.columns])
     df = pd.get_dummies(df, columns=['Sex', 'Embarked'], drop_first=True)
     
+    # Impute
     imputer = SimpleImputer(strategy='median')
     cols = df.columns
     df = pd.DataFrame(imputer.fit_transform(df), columns=cols)
     
+    # Split
     X = df[df['is_train'] == 1].drop(columns=['is_train', 'Survived'])
     y = df[df['is_train'] == 1]['Survived']
     X_test = df[df['is_train'] == 0].drop(columns=['is_train', 'Survived'])
     
     return X, y, X_test
 
-def robust_evaluate(model, X, y, n_splits=5):
+def robust_evaluate(model, X, y, n_splits=5) -> tuple[float, float]:
+    """
+    given model and data
+    return mean accuracy and std dev
+    uses manual stratified k-fold to avoid sklearn version conflicts
+    """
     skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=1)
     scores = []
     X_np, y_np = X.values, y.values
@@ -124,33 +149,42 @@ if __name__ == "__main__":
     print(f"{'Model Name':<30} | {'Accuracy':<10} | {'Std Dev':<10}")
     print("-" * 60)
     
-    # --- DEFINE ALL MODELS ---
+    # --- DEFINE ALL MODELS (Slow Learning Strategy) ---
     
     # 1. Baselines
     rf = RandomForestClassifier(n_estimators=500, max_depth=7, random_state=1, n_jobs=-1)
     lr = Pipeline([('scaler', StandardScaler()), ('logreg', LogisticRegression(max_iter=1000))])
     svm = Pipeline([('scaler', StandardScaler()), ('svm', SVC(probability=True, kernel='rbf', random_state=1))])
     
-    # 2. The Titans (Boosters)
-    xgb = XGBClassifier(n_estimators=1000, learning_rate=0.01, max_depth=5, subsample=0.8, colsample_bytree=0.8, random_state=1, eval_metric='logloss', n_jobs=-1)
-    lgbm = LGBMClassifier(n_estimators=1000, learning_rate=0.01, max_depth=5, num_leaves=31, random_state=1, verbose=-1, n_jobs=-1)
+    # 2. The Titans (Boosters) - High trees, low learning rate
+    xgb = XGBClassifier(
+        n_estimators=1000, learning_rate=0.01, max_depth=5, 
+        subsample=0.8, colsample_bytree=0.8, random_state=1, 
+        eval_metric='logloss', n_jobs=-1
+    )
+    lgbm = LGBMClassifier(
+        n_estimators=1000, learning_rate=0.01, max_depth=5, 
+        num_leaves=31, random_state=1, verbose=-1, n_jobs=-1
+    )
     
     # 3. CatBoost (Wrapped)
     cat = SklearnCompatibleCatBoost(iterations=1000, learning_rate=0.01, depth=6, random_state=1)
     
     # 4. Ensembles
-    # Stacking uses LogReg to combine predictions
+    # Stacking: Uses LogReg to learn when to trust which booster
     stacking = StackingClassifier(
         estimators=[('rf', rf), ('xgb', xgb), ('cat', cat), ('lgbm', lgbm)],
         final_estimator=LogisticRegression(),
-        cv=5
+        cv=5,
+        n_jobs=-1
     )
     
-    # Voting uses weighted averaging
+    # Voting: Weighted soft voting (Boosters > RF)
     voting = VotingClassifier(
         estimators=[('xgb', xgb), ('lgbm', lgbm), ('cat', cat), ('rf', rf)],
         voting='soft',
-        weights=[3, 3, 3, 1]
+        weights=[3, 3, 3, 1],
+        n_jobs=-1
     )
     
     all_models = [
@@ -170,23 +204,27 @@ if __name__ == "__main__":
     best_name = ""
     
     for name, model in all_models:
-        acc, std = robust_evaluate(model, X, y)
-        print(f"{name:<30} | {acc:.4f}     | {std:.4f}")
-        
-        if acc > best_score:
-            best_score = acc
-            best_model = model
-            best_name = name
+        try:
+            acc, std = robust_evaluate(model, X, y)
+            print(f"{name:<30} | {acc:.4f}     | {std:.4f}")
+            
+            if acc > best_score:
+                best_score = acc
+                best_model = model
+                best_name = name
+        except Exception as e:
+            print(f"{name:<30} | FAILED       | Error: {str(e)[:20]}...")
 
     print("-" * 60)
     print(f"Winner: {best_name} with {best_score:.4f}")
     
     # --- SAVE WINNER ---
-    print(f"Training {best_name} on full data and saving...")
-    best_model.fit(X, y)
-    preds = best_model.predict(X_test).astype(int)
-    
-    sub = pd.read_csv("data/gender_submission.csv")
-    sub['Survived'] = preds
-    sub.to_csv("data/submission_ultimate.csv", index=False)
-    print("Success: Submission saved to 'data/submission_ultimate.csv'")
+    if best_model:
+        print(f"Training {best_name} on full data and saving...")
+        best_model.fit(X, y)
+        preds = best_model.predict(X_test).astype(int)
+        
+        sub = pd.read_csv("data/gender_submission.csv")
+        sub['Survived'] = preds
+        sub.to_csv("data/submission_ultimate.csv", index=False)
+        print("Success: Submission saved to 'data/submission_ultimate.csv'")
